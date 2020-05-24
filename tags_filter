@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+
+###statistic and filt tags in .tag file outputed by USTACK with merged fasta file
+def loci_header_filter(Loci_head_list):
+    loci_dict = {}
+    sample_list = []
+    tail_list = []
+    for head in Loci_head_list:
+        head_list = head.split('_')
+        sample_list.append(head_list[0])
+        head_tag = '_'.join(head_list[:3])
+        if head_tag in loci_dict:
+            loci_dict[head_tag][0] += 1
+        else:
+            tail = int(head_list[-1])
+            loci_dict[head_tag] = [1,tail]
+            tail_list.append(tail)
+    if len(set(sample_list)) != 2:
+        return 'filted','sample_number_error'
+    elif len(loci_dict) != 2:
+        return 'filted','loci_number_error'
+    elif tail_list == [1,1]:
+        return 'filted','double_homozygosis'
+    else:
+        for k,v in loci_dict.items():
+            if v[0] != v[1]:
+                return 'filted','loss_allel'
+        return 'pass','loci_pass_filter'
+
+def extract_pri_seq(infile,outfile):
+    print('-------------------------------------')
+    print('Read tags from %s'%infile)
+    print('Write clean tags to %s\n'%outfile)
+    primary_num = 0
+    error_loci_list = []
+    tag_dict = {'total_loci':0,'loci_pass_filter':0,'sample_number_error':0,'loci_number_error':0,'double_homozygosis':0,'loss_allel':0}
+    len_seq_dict = {}
+    with open(infile,'r') as fin, open(outfile,'w') as fout:
+        loci_head_list = []
+        loci_seq_list = []
+        for line in fin:
+            if not line.startswith('#'):
+                line_list = line.split('\t')
+                line_type = line_list[2]
+                if line_type == 'consensus':
+                    if len(loci_head_list) == 0:
+                        continue
+                    assert len(loci_head_list) == len(loci_seq_list)
+                    tag_dict['total_loci'] += 1
+                    state,tag = loci_header_filter(loci_head_list)
+                    tag_dict[tag] += 1
+                    if state == 'pass':
+                        seq_num = len(loci_head_list)
+                        if seq_num in len_seq_dict:
+                            len_seq_dict[seq_num] += 1
+                        else:
+                            len_seq_dict[seq_num] = 1
+                        for i in loci_seq_list:
+                            fout.write(i)
+#                    else:
+#                         error_loci_list.append(int(line_list[1]) - 1)
+                    loci_head_list = []
+                    loci_seq_list = []
+                elif line_type == 'primary':
+                    primary_num += 1
+                    loci_head_list.append(line_list[4])
+                    loci_seq_list.append(line)
+        assert len(loci_head_list) == len(loci_seq_list)
+        tag_dict['total_loci'] += 1
+        state,tag = loci_header_filter(loci_head_list)
+        tag_dict[tag] += 1
+        if state == 'pass':
+            seq_num = len(loci_head_list)
+            if seq_num in len_seq_dict:
+                len_seq_dict[seq_num] += 1
+            else:
+                len_seq_dict[seq_num] = 1
+            for i in loci_seq_list:
+                fout.write(i)
+#        else:
+#            error_loci_list.append(int(line_list[1]))
+    print('primary_num:' + str(primary_num))
+    for k in ['total_loci','loci_pass_filter','sample_number_error','loci_number_error','double_homozygosis','loss_allel']:
+        print(str(k) + ':' + str(tag_dict[k]))
+    print('loci_seq_num:')#'\nerror_loci_list:\n',error_loci_list
+    for k,v in len_seq_dict.items():
+        print('\t'+ str(k) + str(':\t') + str(v))
+    print('\npass rate:' + str(float(tag_dict['loci_pass_filter'])/float(tag_dict['total_loci'])))
+
+usage = '''Remove redundant information and ambiguous RAD loci in .tags.tsv file output by <USTACKS>
+
+Usage:
+tags_filter --tags_file path  --tags_filted path
+
+Input file:
+    -i , --tags_file:      Path to the .tags.tsv file which output by <USTACKS>. (Required)
+
+Output file:
+    -o , --tags_filted:    Path to the output file. (default = <tags_file>.clean)
+
+Additional options:
+    -h , --help:           Display this help message.
+'''
+
+if __name__ == '__main__':
+
+    import argparse
+    parser = argparse.ArgumentParser(description='Remove redundant information and ambiguous RAD loci in .tags.tsv file output by <USTACKS>')
+    parser.add_argument('-i',"--tags_file",required=True,help="Path to the .tags.tsv file which output by <USTACKS>. (Required)")
+    parser.add_argument('-o', '--tags_filted',help="Path to the output file. (default = <tags_file>.clean)")
+    parser.format_usage = lambda : usage
+    parser.format_help = parser.format_usage
+
+    args =  parser.parse_args()
+    args.tags_filted = args.tags_filted if args.tags_filted else args.tags_file + '.clean'
+
+    extract_pri_seq(args.tags_file,args.tags_filted)

@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+
+import sys
+if len(sys.argv) > 1:
+    filename1 = sys.argv[1]
+    filename2 = sys.argv[2]
+    outfile = sys.argv[3]
+
+def header_cat(Filename):
+    with open(Filename,'r') as fin:
+        for line in fin:
+            if not line.startswith('>'):
+                return len(line.strip())
+
+def merger(Fin,Fout,Minl):
+    for line in Fin:
+        if line.startswith('>'):
+            head = line
+        else:
+            if len(line.strip()) >= Minl:
+                Fout.write(head)
+                Fout.write(line[:Minl])
+                Fout.write('\n')
+                
+
+
+def merge(File1,File2,Outfile):
+    minl = min(header_cat(File1),header_cat(File2))
+    print('Sortest length:' + str(minl))
+    with open(File1,'r') as fin1, open(File2,'r') as fin2, open(Outfile,'w') as fout:
+        merger(fin1,fout,minl)
+        merger(fin2,fout,minl)
+
+
+usage = '''Merge the allele sequences of the offspriing with the allele sequences of each candidate parent.
+Note: This script will trim sequences to ensure that the merged sequences has the same length.
+
+Usage:
+fa_merge --fasta_files path1 path2  --merged_file path
+
+Input files:
+    -i , --fasta_files:    Two Paths to the fasta files which output by <extract_seq>. (Required)
+
+Output file:
+    -o , --merged_file:    Path to the merged file. (Required)
+
+Additional options:
+    -h , --help:           Display this help message.
+'''
+
+if __name__ == '__main__':
+
+    import argparse
+    parser = argparse.ArgumentParser(description='Merge the allele sequences of the offspriing with the allele sequences of each candidate parent')
+    parser.add_argument('-i',"--fasta_files",nargs=2,required=True,help="Two Paths to the fasta files which output by <extract_seq>. (Required)")
+    parser.add_argument('-o',"--merged_file",required=True,help="Path to the merged file. (Required)")
+    parser.format_usage = lambda : usage
+    parser.format_help = parser.format_usage
+
+    args =  parser.parse_args()
+    merge(args.fasta_files[0],args.fasta_files[1],args.merged_file)
+

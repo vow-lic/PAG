@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+
+#Extract allele sequences of RAD loci from USTACKS clustering output.
+def extract_pri_seq(infile,outfile):
+    print('-------------------------------------')
+    print('Extract sequences from %s'%infile)
+    print('Write to %s\n'%outfile)
+    stacks_num_dict = {1:0,2:0,'>=3':0}
+    with open(infile,'r') as fin, open(outfile,'w') as fout:
+        stacks_seq_list = []
+        for line in fin:
+            if not line.startswith('#'):
+                line_list = line.split('\t')
+                loci_id = line_list[1]
+                line_type = line_list[2]
+                if line_type == 'consensus':
+                    primary_id = ''
+#                    print len(stacks_seq_list)
+                    hy_num = len(stacks_seq_list)
+                    if hy_num == 1:
+                        stacks_num_dict[1] += 1
+                    elif hy_num == 2:
+                        stacks_num_dict[2] += 1
+                    elif hy_num >= 3:
+                        stacks_num_dict['>=3'] += 1
+
+                    if hy_num < 3:
+                        for i in stacks_seq_list:
+                            i[0].append(str(hy_num))
+                            fout.write('>'+'_'.join(i[0])+'\n')
+                            fout.write(i[1]+'\n')
+                    stacks_seq_list = []
+                elif line_type == 'primary':
+                    if line_list[3] != primary_id:
+#                        print line_list[3],primary_id
+                        seq = line_list[5].replace('N','')
+                        stacks_seq_list.append([line_list[:4],seq])
+                        primary_id = line_list[3]
+        hy_num = len(stacks_seq_list)
+        if hy_num == 1:
+            stacks_num_dict[1] += 1
+        elif hy_num == 2:
+            stacks_num_dict[2] += 1
+        elif hy_num >= 3:
+            stacks_num_dict['>=3'] += 1
+
+        if hy_num < 3:
+            for i in stacks_seq_list:
+                i[0].append(str(hy_num))
+                fout.write('>'+'_'.join(i[0])+'\n')
+                fout.write(i[1]+'\n')
+    print('stacks number of per locus:')
+    for k,v in stacks_num_dict.items():
+        print('\t',k,':',v)
+                
+usage = '''Extract allele sequences of RAD loci from USTACKS clustering output.
+
+Usage:
+extract_seq --tags_file path  --merged_file path
+
+Input files:
+    -i , --tags_file:      Path to the .tags.tsv file which output by <USTACKS>. (Required)
+
+Output file:
+    -o , --fasta_file:     Path to the fasta file which contains extracted allele sequences. (Required)
+
+Additional options:
+    -h , --help:           Display this help message.
+'''
+
+if __name__ == '__main__':
+
+    import argparse
+    parser = argparse.ArgumentParser(description='Extract allele sequences of RAD loci from USTACKS clustering output')
+    parser.add_argument('-i',"--tags_file",required=True,help="Path to the .tags.tsv file which output by <USTACKS>. (Required)")
+    parser.add_argument('-o',"--fasta_file",required=True,help="Path to the fasta file which contains extracted allele sequences. (Required)")
+    parser.format_usage = lambda : usage
+    parser.format_help = parser.format_usage
+
+    args =  parser.parse_args()
+
+    extract_pri_seq(args.tags_file,args.fasta_file)

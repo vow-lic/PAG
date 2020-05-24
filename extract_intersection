@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+
+###extract comparable intersected RAD loci from a list of files output by <tags_filter>
+def num_counter(Loci):
+    count = {}
+    for k in Loci:
+        if Loci[k] in count:
+            count[Loci[k]] += 1
+        else:
+            count[Loci[k]] = 1
+    kl = [x for x in count]
+    kl.sort()
+    print('\n\nIntersected RAD loci number: %d'%count[kl[-1]])
+
+
+def loci_counter(Fid,Fnames):
+    print('-------------------------------------')
+    print('Offspring ID: %d\n\nfiles in processing:'%Fid)
+    loci = {}
+    for name in Fnames:
+        print(name,end=' ')
+        us = []
+        with open(name,'r') as fin:
+            for line in fin:
+                line_list = line.split()[4].split('_')
+                if int(line_list[0]) == Fid:
+                    us.append(int(line_list[1]))
+        for key in set(us):
+            if key in loci:
+                loci[key] += 1
+            else:
+                loci[key] = 1
+#    print(len(us))
+    num_counter(loci)
+    return loci
+
+
+def reclean(Fid,Fnames,Loci,suffix):
+    Minn = len(Fnames)
+    for name in Fnames:
+        outname = name + suffix
+#         print(outname)
+        pre_id = ''
+        with open(name,'r') as fin, open(outname,'w') as fout:
+            for line in fin:
+                line_list = line.split()
+                loci_id = line_list[1]
+                sample_id = int(line_list[4].split('_')[0])
+                os_loci = int(line_list[4].split('_')[1])
+                if not pre_id:
+                    os_id = ''
+                    loci_lines = line
+                    pre_id = loci_id
+                    if sample_id == Fid:
+                        os_id = os_loci
+                elif loci_id != pre_id:
+#                     print(os_id,':',Loci[os_id])
+                    if Loci[os_id] >= Minn:
+                        fout.write(loci_lines)
+                    os_id = ''
+                    loci_lines = line
+                    pre_id = loci_id
+                    if sample_id == Fid:
+                        os_id = os_loci
+                else:
+                    loci_lines += line
+                    if sample_id == Fid:
+                        if os_id:
+                            assert os_id == os_loci
+                        else:
+                            os_id = os_loci
+            if Loci[os_id] >= Minn:
+                fout.write(loci_lines)
+
+def extract_intersection(os_id,infiles,suf):
+    loci_dict = loci_counter(os_id,infiles)
+    reclean(os_id,infiles,loci_dict,suf)
+
+
+usage = '''Extract comparable intersected RAD loci from a list of files output by <tags_filter>
+
+Usage:
+extract_intersection --offspring_ID int  --tags_files [path ...] --suffix str
+
+Input files:
+    -i , --offspring_ID:   The integer ID of offspring previously used in USTACKS. (Required)
+    -l , --tags_files:     A list of Paths to the .tags.tsv files which output by <tags_filter>. (Required)
+
+Output files suffix:
+    -s , --suffix:         Intersecting RAD loci will be recorded in the suffixed files. (default = '.intersection')
+
+Additional options:
+    -h , --help:           Display this help message.
+'''
+
+if __name__ == '__main__':
+
+    import argparse
+    parser = argparse.ArgumentParser(description='Extract comparable intersected RAD loci from a list of files output by <tags_filter>')
+    parser.add_argument('-i',"--offspring_ID",type=int,required=True,help="The integer ID of offspring previously used in USTACKS. (Required)")
+    parser.add_argument('-l',"--tags_files",nargs='+',required=True,help="A list of Paths to the .tags.tsv files which output by <tags_filter>. (Required)")
+    parser.add_argument('-s', '--suffix',help="Intersecting RAD loci will be recorded in the suffixed files. (default = '.intersection')")
+    parser.format_usage = lambda : usage
+    parser.format_help = parser.format_usage
+
+    args =  parser.parse_args()
+
+    extract_intersection(args.offspring_ID,args.tags_files,args.suffix)
+

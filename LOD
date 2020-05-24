@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+
+###calculate mismatch from tags file, in common situation, tags was filted. 
+def N_drop_list(list1,list2):
+    seq_list = []
+    drop_list = []
+    for seq in list1:
+        seq_list.append(seq)
+    for seq in list2:
+        seq_list.append(seq)
+    LEN = len(seq_list[0])
+    for seq in seq_list:
+        assert len(seq) == LEN
+    for idx in range(LEN):
+        N = 'F'
+        for seq in seq_list:
+            if seq[idx] == 'N':
+                N = 'T'
+        if N == 'T':
+            drop_list.append(idx)
+        else:
+            break
+    for idx in range(LEN-1,-1,-1):
+        N = 'F'
+        for seq in seq_list:
+            if seq[idx] == 'N':
+                N = 'T'
+        if N == 'T':
+            drop_list.append(idx)
+        else:
+            break
+    return drop_list
+'''
+list1 = ['TTATATCTTCAAAAGATTTTGTCTGCCCCATCACTTTTAAACATACACTGTAACACTCTGTGTTGTTTCACAGGTTACTAAGACTTTTTCCAGTCTTCCTNNNNNNNNNNN','NNNNNNNNNNNAAAGATTTTGTCTGCCCCATCACTTTTAAACATACACTGTAACACTCTGTGTTGTTTCACAGGTTACTAAGACTTTTTCCAGTCTTCCTCTGTCTTTCTG']
+list2 = ['TTATATCTTCAAAAGATTTTGTCTGCCCCATCACTTTTAAACATACACTGTAACACTCTGTGTTGTTTCACAGGTTACTAAGACTTTTTCCAGTCTTCCTNNNNNNNNNNN']
+N_drop_list(list1,list2)
+
+[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 110, 109, 108, 107, 106, 105, 104, 103, 102, 101, 100]
+'''
+
+def compare_aligned_seq(seq1,seq2,drop_list):
+    M = 0
+    G = 0
+    for idx in range(len(seq1)):
+        if idx in drop_list:
+            continue
+        else:
+            letter1 = seq1[idx]
+            letter2 = seq2[idx]
+            if letter1 != letter2:
+                if letter1 == 'N':
+                    if seq1[idx -1] != 'N':
+                        G += 1
+                elif letter2 == 'N':
+                    if seq2[idx -1] != 'N':
+                        G += 1
+                else:
+                    M += 1
+    return M,M + G
+'''
+seq1 = 'NNCTAGCTCAGTGGNNGCAAGGCTGAATAAAGAGGAAG'
+seq2 = 'CACTAGCTCAGTGGACGCAAGGCTGAATAAAGAGGAAT'
+drop_list = [0,1]
+compare_aligned_seq(seq1,seq2,drop_list)
+
+(1,2)
+'''
+
+def list_compare(list1,list2):
+    drop_list = N_drop_list(list1,list2)
+    M_L = []
+    E_L = []
+    for seq1 in list1:
+        for seq2 in list2:
+            M,E = compare_aligned_seq(seq1,seq2,drop_list)
+            M_L.append(M)
+            E_L.append(E)
+    return M_L,E_L
+
+'''
+list1 = ['CTCGCTCNN','CTAGCTCAG']
+list2 = ['CTAGCTCAG','CTANNTCAG']
+list_compare(list1,list2)
+'''
+
+def calculate_ME(infile,outfile):
+    with open(infile,'r') as fin,open(outfile,'w') as fout:
+        fout.write('#%s\t%s\t%s\t%s\t%s\t%s\n'%('Loci_id','Loci_type','min_Mismatch','min_Editdistance','Mismatchs','Editdistances'))
+        loci_dict = {}
+        pre_loci = ''
+        for line in fin:
+            line_list = line.split('\t')
+            loci_id  = line_list[1]
+            pri_head = line_list[4]
+            pri_seq = line_list[5]
+            sample_id = pri_head.split('_')[0]
+            if loci_id != pre_loci:
+                if len(loci_dict) == 0:
+                    loci_dict = {sample_id:[pri_seq]}
+                    pre_loci = loci_id
+                    continue
+#                print('pre_loci:',pre_loci)
+                compare_list = []
+                for k,v in loci_dict.items():
+                    compare_list.append(v)
+                assert len(compare_list) == 2
+                Mm_list,Ed_list = list_compare(compare_list[0],compare_list[1])
+                fout.write('%s\t%d\t%d\t%d\t%s\t%s\n'%(pre_loci,len(Mm_list),min(Mm_list),min(Ed_list),','.join(map(str,Mm_list)),','.join(map(str,Ed_list))))
+                loci_dict = {sample_id:[pri_seq]}
+                pre_loci = loci_id
+            else:
+                if sample_id in loci_dict:
+                    loci_dict[sample_id].append(pri_seq)
+                else:
+                    loci_dict[sample_id] = [pri_seq]
+        compare_list = []
+        for k,v in loci_dict.items():
+            compare_list.append(v)
+        assert len(compare_list) == 2
+        Mm_list,Ed_list = list_compare(compare_list[0],compare_list[1])
+        fout.write('%s\t%d\t%d\t%d\t%s\t%s\n'%(pre_loci,len(Mm_list),min(Mm_list),min(Ed_list),','.join(map(str,Mm_list)),','.join(map(str,Ed_list))))
+
+
+###calculate LOD base on mismatch
+#function factorial
+def factor(a):
+    if a == 0:
+        return 1
+    elif a > 0:
+        x = 1
+        for i in range(1,a+1):
+            x = x*i
+        return x
+
+def poisson(k,n,p):
+    e = 2.7182
+    lamb = n*p
+    return e**(-lamb)*lamb**k/factor(k)
+
+
+def LR(k,n,p1,p2):
+    return poisson(k,n,p1)/poisson(k,n,p2)
+
+
+from math import log
+def LOD(n,p1,p2,msdic):
+    lod = 0
+    for ms,num in msdic.items():
+        lod += num*log(LR(ms,n,p1,p2),10)
+    return lod
+
+"""
+##
+ms_dict = {0:100,1:10,2:3}
+LOD(100,0.0024,0.0034,ms_dict)
+
+2.487097106649811
+##
+"""
+def ms_cal(filename):
+    with open(filename,'r') as fin:
+        ms_dict = {}
+        cl = 0
+        for line in fin:
+            if not line.startswith('#'):
+                cl += 1
+                line_list = line.split('\t')
+                loci_type = line_list[1]
+                loci_ms = int(line_list[2])
+                if loci_ms in ms_dict:
+                    ms_dict[loci_ms] += 1
+                else:
+                    ms_dict[loci_ms] = 1
+    print('%s%s%s'%('total loci:',cl,'\nmis\tcount\trate'))
+    cl = float(cl)
+    for k,v in ms_dict.items():
+        print('%s%s%s%s%s'%(k,'\t',v,'\t',v/cl))
+    return ms_dict,cl
+
+from os import remove
+def main_lod(infile,seqlen,errate,herate):
+    outfile = infile + '.count.temp'
+    print('-------------------------------------')
+    print('Calculate LOD score for: %s\n'%infile)
+    calculate_ME(infile,outfile)
+    relative_mismatch_pro = 2*errate
+    random_mismatch_pro = 2*(errate + herate)
+    ms_dict,loci_num = ms_cal(outfile)
+    lod_score = LOD(seqlen,relative_mismatch_pro,random_mismatch_pro,ms_dict)
+    print('%s%s'%('\nLOD score:',lod_score))
+    remove(outfile)
+    return lod_score
+
+
+usage = '''Calculate LOD score from .tsv file output by <tags_filter> or <extract_interserction>
+
+Usage:
+python LOD.py --tags_file path  --seq_length int --sequencing_error_rate float --heterozygosity_rate float
+
+Input file:
+    -i , --tags_file:      Path to the file which output by by <tags_filter> or <extract_interserction>. (Required)
+
+Sequencing information:
+    -l , --seq_length:     Seqences length of RAD_seq.  (default = 100)
+
+Model parameter:
+    -er, --seq_error_rate: Probability of a mismatch occurrence at one base due to sequencing error.  (default = 0.0024)
+    -he, --heterozygosity: Probability of a mismatch occurrence at one base due to heterozygosity.  (default = 0.0034)
+
+Additional options:
+    -h , --help:           Display this help message.
+'''
+
+if __name__ == '__main__':
+
+    import argparse
+    parser = argparse.ArgumentParser(description='Calculate LOD score from .tsv file output by <tags_filter> or <extract_interserction>')
+    parser.add_argument('-i',"--tags_file",required=True,help="Path to the file which output by by <tags_filter> or <extract_interserction>. (Required)")
+    parser.add_argument('-l', '--seq_length',type=int,default=145,help="Seqences length of RAD_seq.  (default = 100)")
+    parser.add_argument('-er','--sequencing_error_rate',type=float,default=0.0024,help="Probability of a mismatch occurrence at one base due to sequencing error.  (default = 0.0024)")
+    parser.add_argument('-he','--heterozygosity_rate',type=float,default=0.001,help="Probability of a mismatch occurrence at one base due to heterozygosity.  (default = 0.0034)")
+    parser.format_usage = lambda : usage
+    parser.format_help = parser.format_usage
+
+    args =  parser.parse_args()
+
+    main_lod(args.tags_file,args.seq_length,args.sequencing_error_rate,args.heterozygosity_rate)
+#    parser.add_argument("x", type=int, help="the base",default=0,required=True)
